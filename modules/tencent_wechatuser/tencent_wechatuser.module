@@ -5,7 +5,7 @@
  * Implementation of Entity Tencent WeChatUser.
  */
 
-use EasyWeChat\Foundation\Application;
+use EasyWeChat\Factory;
 
 require_once __DIR__ . "/includes/tencent_wechatuser.admin.inc";
 require_once __DIR__ . "/includes/tencent_wechatuser_type.admin.inc";
@@ -61,28 +61,18 @@ function tencent_wechatuser_sync_form_submit() {
  */
 function _tencent_wechatuser_sync_batch() {
 
-  $options = [
-    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
-    'app_id' => variable_get('tencent_wechat_app_id'),
-    'secret' => variable_get('tencent_wechat_secret'),
-    'token'  => variable_get('tencent_wechat_token'),
-    'aes_key' => variable_get('tencent_wechat_aes_key'),
-    'log' => [
-      'level' => 'debug',
-      'file'  => variable_get('tencent_wechat_debug_file_path'),
-    ],
-  ];
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
 
-  $app = new Application($options);
-  $userService = $app->user;
+  $config = tencent_wechat_get_default_config();
+
+  $app = Factory::officialAccount($config);
 
   $next_openid = NULL;
   $openids = [];
   $total = 0;
 
   while (TRUE) {
-    $users = $userService->lists($next_openid);
-    $users = $users->all();
+    $users = $app->user->list($next_openid);
     $total = $users['total'];
     if ($users['count'] === 0) {
       break;
@@ -90,7 +80,9 @@ function _tencent_wechatuser_sync_batch() {
     $openids = array_merge(array_values($openids), array_values($users['data']['openid']));
     $next_openid = $users['next_openid'];
   }
+
   $chunks = array_chunk($openids, 10);
+
   $count_chunks = count($chunks);
 
   $operations = [];
@@ -121,22 +113,14 @@ function _tencent_wechatuser_sync_batch() {
 
 function tencent_wechatuser_sync_chunk($openids, $total, $message, &$context) {
 
-  $options = [
-    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
-    'app_id' => variable_get('tencent_wechat_app_id'),
-    'secret' => variable_get('tencent_wechat_secret'),
-    'token'  => variable_get('tencent_wechat_token'),
-    'aes_key' => variable_get('tencent_wechat_aes_key'),
-    'log' => [
-      'level' => 'debug',
-      'file'  => variable_get('tencent_wechat_debug_file_path'),
-    ],
-  ];
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
 
-  $app = new Application($options);
-  $userService = $app->user;
-  $data = $userService->batchGet($openids);
-  $data = $data->all();
+  $config = tencent_wechat_get_default_config();
+
+  $app = Factory::officialAccount($config);
+
+  $data = $app->user->select($openids);
+
   $user_info_list = $data['user_info_list'];
 
   foreach ($user_info_list as $user_info) {

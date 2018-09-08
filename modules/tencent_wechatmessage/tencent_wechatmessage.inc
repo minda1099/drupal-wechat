@@ -6,45 +6,33 @@
  */
 
 /**
- * Implements hook_tencent_wechat_response_alter().
+ * Implements hook_tencent_wechat_message().
  */
-function tencent_wechatmessage_tencent_wechat_response_alter(&$response_message, $context) {
-
-  $request_message = $context["request_message"];
-
-  // Suppress location event.
-  if ($request_message->MsgType === "event" && $request_message->Event === "LOCATION") {
-    $response_message = NULL;
-  }
-  $queue = DrupalQueue::get('tencent_wechatmessage');
-  $queue->createItem([$request_message, $response_message]);
+function tencent_wechatmessage_tencent_wechat_message($request_message) {
+  $queue = DrupalQueue::get('tencent_wechatmessage_request_message');
+  $queue->createItem($request_message);
 }
 
 /**
  * Implements hook_cron_queue_info().
  */
 function tencent_wechatmessage_cron_queue_info() {
-  $queues['tencent_wechatmessage'] = array(
-    'worker callback' => 'tencent_wechatmessage_worker',
+  $queues['tencent_wechatmessage_request_message'] = array(
+    'worker callback' => 'tencent_wechatmessage_request_message_worker',
     'time' => 60,
   );
   return $queues;
 }
 
 /**
- * Message worker.
+ * Request message worker.
  *
- * @param array $item
- *   The request message and response message.
+ * @param array $request_message
+ *   The request message.
  */
-function tencent_wechatmessage_worker(array $item) {
-  list($request_message, $response_message) = $item;
+function tencent_wechatmessage_request_message_worker(array $request_message) {
   watchdog("tencent_wechatmessage",
-    "A message from: %openid %time [%type]",
-    [
-      "%openid" => $request_message->FromUserName,
-      "%time" => REQUEST_TIME,
-      "%type" => $request_message->MsgType,
-    ]
+    "1. Request message: <br/> !result",
+    ["!result" => '<pre>' . var_export($request_message, TRUE) . '</pre>']
   );
 }

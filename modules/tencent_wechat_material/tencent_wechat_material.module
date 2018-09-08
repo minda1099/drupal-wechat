@@ -1,0 +1,92 @@
+<?php
+
+/**
+ * @file
+ * Implementation of Entity Tencent Wechat Material.
+ */
+use EasyWeChat\Factory;
+use EasyWeChat\Kernel\Messages\Image;
+
+/**
+ * Implements hook_menu().
+ */
+function tencent_wechat_material_menu() {
+  $items['admin/config/tencent-wechat/subscribe-message'] = array(
+    'title' => 'Subscription Message',
+    'description' => 'Send an image to user while subscription.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tencent_wechat_material_subscribe_form'),
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['file/%file/upload'] = array(
+    'title' => 'Upload to WeChat',
+    'page callback' => 'tencent_wechat_material_file_entity_upload_page',
+    'page arguments' => array(1),
+    'access callback' => 'file_entity_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE,
+  );
+  return $items;
+}
+
+function tencent_wechat_material_subscribe_form($form, &$form_state) {
+
+  $form['tencent_wechat_material_subscribe_media_id'] = array(
+    '#type' => 'textfield',
+    '#description' => t('Media ID.'),
+    '#default_value' => variable_get('tencent_wechat_material_subscribe_media_id', ''),
+  );
+
+  return system_settings_form($form);
+
+}
+
+
+function tencent_wechat_material_file_entity_upload_page($file) {
+
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
+
+  $config = tencent_wechat_get_default_config();
+
+  $app = Factory::officialAccount($config);
+
+  $result = $app->material->uploadImage(drupal_realpath($file->uri));
+
+  $wrapper = entity_metadata_wrapper('file', $file);
+  $wrapper->tencent_material_url = $result['url'];
+  $wrapper->tencent_material_media_id = $result['media_id'];
+  $wrapper->save();
+
+  return '<pre>' . var_export($result, TRUE) . '</pre>';
+}
+
+/**
+ * 订阅发送优惠券.
+ *
+ * @param array $request_message
+ *   The request message to be handled further.
+ */
+function tencent_wechat_material_tencent_wechat_custom_service($request_message) {
+
+  $openId = $request_message['FromUserName'];
+
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
+
+  $config = tencent_wechat_get_default_config();
+
+  $app = Factory::officialAccount($config);
+  $image = new Image(variable_get('tencent_wechat_material_subscribe_media_id'));
+
+  // 如果是新用户. 发送二维码.
+  if ($request_message['MsgType'] === 'event' && $request_message['Event'] === 'subscribe') {
+    $result = $app->customer_service->message($image)->to($openId)->send();
+  }
+
+  // 如果是新用户. 发送二维码.
+  if ($request_message['MsgType'] === 'text' && $request_message['Content'] === '我要大礼包') {
+    $result = $app->customer_service->message($image)->to($openId)->send();
+  }
+
+}

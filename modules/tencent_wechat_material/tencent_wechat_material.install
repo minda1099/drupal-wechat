@@ -1,0 +1,80 @@
+<?php
+
+function tencent_wechat_material_install() {
+
+  $fields = [
+    [
+      'field_name' => 'tencent_material_url',
+      'type' => 'text',
+      'settings' => [
+        'max_length' => '1024',
+      ],
+    ],
+    [
+      'field_name' => 'tencent_material_media_id',
+      'type' => 'text',
+    ],
+  ];
+
+  $instances = [
+    [
+      'field_name' => 'tencent_material_url',
+      'label' => 'URL',
+    ],
+    [
+      'field_name' => 'tencent_material_media_id',
+      'label' => 'Media ID',
+    ],
+  ];
+
+  $entity_info = [
+    'entity_type' => 'file',
+    'bundle' => 'image',
+  ];
+
+  $instances = array_map(function ($instance) use ($entity_info) {
+    return array_merge($instance, $entity_info);
+  }, $instances);
+
+  foreach ($fields as $field) {
+    if (field_read_field($field['field_name']) === FALSE) {
+      field_create_field($field);
+    }
+  }
+
+  foreach ($instances as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) === FALSE) {
+      field_create_instance($instance);
+    }
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function tencent_wechat_material_uninstall() {
+
+  $field_names = [
+    'tencent_material_url',
+    'tencent_material_media_id',
+  ];
+  $entity_info = [
+    'entity_type' => 'file',
+    'bundle' => 'image',
+  ];
+
+  $instances = array_map(function ($field_name) use ($entity_info) {
+    return array_merge(['field_name' => $field_name], $entity_info);
+  }, $field_names);
+
+  foreach ($instances as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) !== FALSE) {
+      field_delete_instance($instance);
+    }
+  }
+  foreach ($field_names as $field_name) {
+    if (field_read_field($field_name) !== FALSE) {
+      field_delete_field($field_name);
+    }
+  }
+}

@@ -5,15 +5,16 @@ package = Tencent
 
 dependencies[] = entity
 dependencies[] = date
+dependencies[] = tencent_wechat
 
 files[] = includes/tencent_wechatuser.class.inc
 files[] = includes/tencent_wechatuser.controller.inc
 files[] = includes/tencent_wechatuser.type.controller.inc
 files[] = includes/tencent_wechatuser.metadata_controller.inc
 
-; Information added by Drupal.org packaging script on 2017-08-25
-version = "7.x-1.0-alpha8"
+; Information added by Drupal.org packaging script on 2018-01-25
+version = "7.x-2.0-alpha2"
 core = "7.x"
 project = "tencent_wechat"
-datestamp = "1503669246"
+datestamp = "1516869353"
 

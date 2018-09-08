@@ -11,6 +11,6 @@
     "source": "http://cgit.drupalcode.org/tencent_wechat"
   },
   "require": {
-    "overtrue/wechat": "3.3.9"
+    "overtrue/wechat": "~4.0"
   }
 }

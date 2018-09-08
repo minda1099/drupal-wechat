@@ -1,6 +1,6 @@
 <?php
-use EasyWeChat\Foundation\Application;
-use EasyWeChat\Message\Text;
+use EasyWeChat\Factory;
+use EasyWeChat\Kernel\Messages\Text;
 
 /*
  * Reserved values for permanent QR codes use.
@@ -22,7 +22,7 @@ function tencent_wechatbinding_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('tencent_wechatbinding_bind_form', 1),
     'access callback' => 'tencent_wechatbinding_bind_access',
-    'access arguments' => array(1), 
+    'access arguments' => array(1),
     'type' => MENU_LOCAL_TASK,
   );
 
@@ -54,14 +54,6 @@ function tencent_wechatbinding_menu() {
     'type' => MENU_CALLBACK,
   );
 
-  // Auto get user info.
-  $items['tencent-wechatbinding/oauth-userinfo'] = array(
-    'title' => 'Result',
-    'page callback' => 'tencent_wechatbinding_oauth_userinfo',
-    'access callback' => TRUE,
-    'type' => MENU_CALLBACK,
-  );
-
   // Oauth redirect endpoint.
   $items['tencent-wechatbinding/oauth-callback'] = array(
     'title' => 'Result',
@@ -70,13 +62,22 @@ function tencent_wechatbinding_menu() {
     'type' => MENU_CALLBACK,
   );
 
-  // Oauth Userinfo redirect endpoint.
+  // Auto get Userinfo endpoint.
+  $items['tencent-wechatbinding/oauth-userinfo'] = array(
+    'title' => 'Result',
+    'page callback' => 'tencent_wechatbinding_oauth_userinfo',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  // Oauth get Userinfo redirect endpoint.
   $items['tencent-wechatbinding/oauth-userinfo-callback'] = array(
     'title' => 'Result',
     'page callback' => 'tencent_wechatbinding_oauth_userinfo_callback',
     'access callback' => TRUE,
     'type' => MENU_CALLBACK,
   );
+
 
   return $items;
 }
@@ -143,8 +144,6 @@ function tencent_wechatbinding_bind_form($form, &$form_state, $account, $categor
   $wrapper = entity_metadata_wrapper('user', $account->uid);
   $tencent_wechatuser_id = $wrapper->tencent_wechat_user->raw();
 
-
-
   if (!empty($tencent_wechatuser_id)) {
 
     $wechat_user_entity = entity_load('tencent_wechatuser', [$tencent_wechatuser_id]);
@@ -155,7 +154,7 @@ function tencent_wechatbinding_bind_form($form, &$form_state, $account, $categor
     $uri = entity_uri('tencent_wechatuser', $wechat_user);
     $label = entity_label("tencent_wechatuser", $wechat_user);
 
-    $wechat_user_link = l($lqabel, $uri['path']);
+    $wechat_user_link = l($label, $uri['path']);
 
     $form["unbind"] = [
       "#prefix" => '<p id="tencent-wechatuser-unbind">',
@@ -171,25 +170,15 @@ function tencent_wechatbinding_bind_form($form, &$form_state, $account, $categor
     return $form;
   }
 
-  $options = [
-    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
-    'app_id' => variable_get('tencent_wechat_app_id'),
-    'secret' => variable_get('tencent_wechat_secret'),
-    'token'  => variable_get('tencent_wechat_token'),
-    'aes_key' => variable_get('tencent_wechat_aes_key'),
-    'log' => [
-      'level' => 'debug',
-      'file'  => variable_get('tencent_wechat_debug_file_path'),
-    ],
-  ];
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
 
-  $app = new Application($options);
+  $config = tencent_wechat_get_default_config();
 
-  $qrcode = $app->qrcode;
-  $result = $qrcode->temporary($account->uid * 2 - 1 + TENCENT_WECHATBINDING_PERMANENT_SCENEID_MAX, 120);
-  $ticket = $result->ticket;
-  $url = $qrcode->url($ticket);
+  $app = Factory::officialAccount($config);
 
+  $result = $app->qrcode->temporary($account->uid * 2 - 1 + TENCENT_WECHATBINDING_PERMANENT_SCENEID_MAX, 120);
+  $ticket = $result['ticket'];
+  $url = $app->qrcode->url($ticket);
 
   $form['help'] = array(
     "#prefix" => '<p id="tencent-wechatuser-binding-message">',
@@ -231,11 +220,17 @@ function tencent_wechatbinding_tencent_wechat_response_alter(&$response_message,
 
   $request_message = $context["request_message"];
 
-  /*
-   * Scan QR Code on Drupal site to bind.
-   */
-  _tencent_wechatbinding_bind_scan($response_message, $request_message);
-  _tencent_wechatbinding_bind_click($response_message, $request_message);
+  if ($request_message['MsgType'] === 'event') {
+    /*
+     * Scan QR Code on Drupal site to bind.
+     */
+    _tencent_wechatbinding_bind_scan($response_message, $request_message);
+
+    /*
+     * Or click link in WeChat to bind.
+     */
+    _tencent_wechatbinding_bind_click($response_message, $request_message);
+  }
 
 }
 
@@ -260,18 +255,18 @@ function _tencent_wechatbinding_bind_scan(&$response_message, $request_message) 
    * @see https://mp.weixin.qq.com/wiki?t=resource/res_main&id=mp1421140454
    */
   if (
-    ($request_message->Event === "subscribe" &&
-      strpos($request_message->EventKey, "qrscene_") === 0) ||
-    $request_message->Event === "SCAN") {
+    ($request_message['Event'] === "subscribe" &&
+      strpos($request_message['EventKey'], "qrscene_") === 0) ||
+    $request_message['Event'] === "SCAN") {
 
     // Retrieve the scene ID.
     $scene_id = NULL;
 
-    if ($request_message->Event === "subscribe") {
-      $scene_id = substr($request_message->EventKey, strlen("qrscene_"));
+    if ($request_message['Event'] === "subscribe") {
+      $scene_id = substr($request_message['EventKey'], strlen("qrscene_"));
     }
-    if ($request_message->Event === "SCAN") {
-      $scene_id = $request_message->EventKey;
+    if ($request_message['Event'] === "SCAN") {
+      $scene_id = $request_message['EventKey'];
     }
 
     if (is_numeric($scene_id)) {
@@ -280,7 +275,7 @@ function _tencent_wechatbinding_bind_scan(&$response_message, $request_message) 
       $uid = tencent_wechatbinding_uid($scene_id);
       if ($uid) {
 
-        $openid = $request_message->FromUserName;
+        $openid = $request_message['FromUserName'];
 
         $tencent_wechatuser_id = tencent_wechatbinding_get_tencent_wechatuser_id($openid);
 
@@ -296,8 +291,7 @@ function _tencent_wechatbinding_bind_scan(&$response_message, $request_message) 
           $link = l(t('这里'), $base_url . "/tencent-wechatbinding/oauth/?destination=tencent-wechatbinding/unbind");
           $content = t('您的微信成功绑定用户：!username！取消绑定，请点击!link。', ["!username" => $wrapper->label(), "!link" => $link]);
         }
-        $text = new Text();
-        $text->content = $content;
+        $text = new Text($content);
         $response_message = $text;
       }
     }
@@ -314,8 +308,8 @@ function _tencent_wechatbinding_bind_scan(&$response_message, $request_message) 
  */
 function _tencent_wechatbinding_bind_click(&$response_message, $request_message) {
 
-  if ($request_message->Event === "CLICK" && $request_message->EventKey === "binding") {
-    $openid = $request_message->FromUserName;
+  if ($request_message['Event'] === "CLICK" && $request_message['EventKey'] === "binding") {
+    $openid = $request_message['FromUserName'];
     $tencent_wechatuser_id = tencent_wechatbinding_get_tencent_wechatuser_id($openid);
 
     if (tencent_wechatbinding_bound($tencent_wechatuser_id)) {
@@ -360,7 +354,7 @@ function _tencent_wechatbinding_bind_click(&$response_message, $request_message)
       );
     }
 
-    $response_message = $content;
+    $response_message = new Text($content);
 
   }
 }
@@ -397,22 +391,15 @@ function tencent_wechatbinding_uid($scene_id) {
  *   Tencent WeChatUser Id.
  */
 function tencent_wechatbinding_get_tencent_wechatuser_id($openid) {
-  $options = [
-    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
-    'app_id' => variable_get('tencent_wechat_app_id'),
-    'secret' => variable_get('tencent_wechat_secret'),
-    'token'  => variable_get('tencent_wechat_token'),
-    'aes_key' => variable_get('tencent_wechat_aes_key'),
-    'log' => [
-      'level' => 'debug',
-      'file'  => variable_get('tencent_wechat_debug_file_path'),
-    ],
-  ];
 
-  $app = new Application($options);
-  $userService = $app->user;
-  $data = $userService->get($openid);
-  $user_info = $data->all();
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
+
+  $config = tencent_wechat_get_default_config();
+
+  $app = Factory::officialAccount($config);
+
+  $data = $app->user->get($openid);
+
   $entity_type = 'tencent_wechatuser';
   $entity = tencent_wechatuser_load_entity_by_openid($openid);
   if (!$entity) {
@@ -420,20 +407,20 @@ function tencent_wechatbinding_get_tencent_wechatuser_id($openid) {
   }
   $wrapper = entity_metadata_wrapper($entity_type, $entity);
   $wrapper->tencent_openid = $openid;
-  $wrapper->label = $user_info['nickname'];
-  $wrapper->tencent_subscribe = $user_info['subscribe'];
-  $wrapper->tencent_nickname = $user_info['nickname'];
-  $wrapper->tencent_sex = $user_info['sex'];
-  $wrapper->tencent_city = $user_info['city'];
-  $wrapper->tencent_country = $user_info['country'];
-  $wrapper->tencent_province = $user_info['province'];
-  $wrapper->tencent_language = $user_info['language'];
-  $wrapper->tencent_head_image_url = $user_info['headimgurl'];
-  $wrapper->tencent_subscribe_time = $user_info['subscribe_time'];
-  $wrapper->tencent_unionid = isset($user_info['unionid']) ? $user_info['unionid'] : "";
-  $wrapper->tencent_remark = $user_info['remark'];
-  $wrapper->tencent_groupid = $user_info['groupid'];
-  $wrapper->tencent_tagid_list = $user_info['tagid_list'];
+  $wrapper->label = $data['nickname'];
+  $wrapper->tencent_subscribe = $data['subscribe'];
+  $wrapper->tencent_nickname = $data['nickname'];
+  $wrapper->tencent_sex = $data['sex'];
+  $wrapper->tencent_city = $data['city'];
+  $wrapper->tencent_country = $data['country'];
+  $wrapper->tencent_province = $data['province'];
+  $wrapper->tencent_language = $data['language'];
+  $wrapper->tencent_head_image_url = $data['headimgurl'];
+  $wrapper->tencent_subscribe_time = $data['subscribe_time'];
+  $wrapper->tencent_unionid = isset($data['unionid']) ? $data['unionid'] : "";
+  $wrapper->tencent_remark = $data['remark'];
+  $wrapper->tencent_groupid = $data['groupid'];
+  $wrapper->tencent_tagid_list = $data['tagid_list'];
   $wrapper->save();
   return $wrapper->getIdentifier();
 }
@@ -517,19 +504,11 @@ function tencent_wechatbinding_wechat_client_form_submit($form, &$form_state) {
 
   $verify_result = tencent_wechatbinding_signature_verify($openid, $signature, $timestamp, $nonce);
 
-  $options = [
-    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
-    'app_id' => variable_get('tencent_wechat_app_id'),
-    'secret' => variable_get('tencent_wechat_secret'),
-    'token'  => variable_get('tencent_wechat_token'),
-    'aes_key' => variable_get('tencent_wechat_aes_key'),
-    'log' => [
-      'level' => 'debug',
-      'file'  => variable_get('tencent_wechat_debug_file_path'),
-    ],
-  ];
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
 
-  $app = new Application($options);
+  $config = tencent_wechat_get_default_config();
+
+  $app = Factory::officialAccount($config);
 
   if ($verify_result) {
     $wrapper = entity_metadata_wrapper('user', $user->uid);
@@ -546,12 +525,12 @@ function tencent_wechatbinding_wechat_client_form_submit($form, &$form_state) {
         ["!username" => $wrapper->label()]
       );
     }
-    $app->staff->message($message)->to($openid)->send();
+    $app->customer_service->message($message)->to($openid)->send();
   }
   else {
     $message = t("签名检查失败，请确认您使用的不是伪造链接。");
     drupal_set_message($message);
-    $app->staff->message($message)->to($openid)->send();
+    $app->customer_service->message($message)->to($openid)->send();
   }
 }
 
@@ -643,24 +622,21 @@ function tencent_wechatbinding_oauth() {
     $callback = base_path() . "tencent-wechatbinding/oauth-callback?" . drupal_http_build_query($destination);
   }
 
-  $options = [
-    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
-    'app_id' => variable_get('tencent_wechat_app_id'),
-    'secret' => variable_get('tencent_wechat_secret'),
-    'token'  => variable_get('tencent_wechat_token'),
-    'aes_key' => variable_get('tencent_wechat_aes_key'),
-    'log' => [
-      'level' => 'debug',
-      'file'  => variable_get('tencent_wechat_debug_file_path'),
-    ],
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
+
+  $config = tencent_wechat_get_default_config();
+
+  $config = array_merge($config, [
     'oauth' => [
       'scopes'   => ['snsapi_base'],
       'callback' => $callback,
     ],
-  ];
-  $app = new Application($options);
-  $oauth = $app->oauth;
-  $oauth->redirect()->send();
+  ]);
+
+  $app = Factory::officialAccount($config);
+
+  $app->oauth->redirect()->send();
+
   exit;
 }
 
@@ -718,8 +694,9 @@ function tencent_wechatbinding_oauth_callback() {
   drupal_goto("user/login");
 }
 
+
 /**
- * Oauth Userinfo Callback
+ * Oauth get Userinfo page callback.
  */
 function tencent_wechatbinding_oauth_userinfo() {
   global $user;
@@ -740,31 +717,27 @@ function tencent_wechatbinding_oauth_userinfo() {
     $callback = base_path() . "tencent-wechatbinding/oauth-userinfo-callback?" . drupal_http_build_query($destination);
   }
 
-  $options = [
-    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
-    'app_id' => variable_get('tencent_wechat_app_id'),
-    'secret' => variable_get('tencent_wechat_secret'),
-    'token'  => variable_get('tencent_wechat_token'),
-    'aes_key' => variable_get('tencent_wechat_aes_key'),
-    'log' => [
-      'level' => 'debug',
-      'file'  => variable_get('tencent_wechat_debug_file_path'),
-    ],
+  module_load_include('inc', 'tencent_wechat', 'tencent_wechat');
+
+  $config = tencent_wechat_get_default_config();
+
+  $config = array_merge($config, [
     'oauth' => [
       'scopes'   => ['snsapi_userinfo'],
       'callback' => $callback,
     ],
-  ];
-  $app = new Application($options);
-  $oauth = $app->oauth;
-  $oauth->redirect()->send();
+  ]);
+
+  $app = Factory::officialAccount($config);
+
+  $app->oauth->redirect()->send();
+
   exit;
 }
 
 
-
 /**
- * Oauth Userinfo redirect callback.
+ * Oauth redirect callback.
  */
 function tencent_wechatbinding_oauth_userinfo_callback() {
 
@@ -811,7 +784,6 @@ function tencent_wechatbinding_oauth_userinfo_callback() {
           drupal_goto("user/" . $user->uid);
         }
       } else {
-        // create user
         drupal_goto("/");
       }
     }
