@@ -1,0 +1,73 @@
+<?php
+
+/**
+ * @file
+ * The tencent_wechat module file.
+ */
+
+/**
+ * Implements hook_help().
+ */
+function tencent_wechat_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#tencent_wechat':
+      $output = file_get_contents(drupal_get_path('module', 'tencent_wechat') . '/README.md');
+      return module_exists('markdown') ? filter_xss_admin(module_invoke('markdown', 'filter', 'process', 0, -1, $output)) : '<pre>' . check_plain($output) . '</pre>';
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function tencent_wechat_menu() {
+
+  /*
+   * The endpoint called by the WeChat Server.
+   *
+   * On the WeChat administration page provided by Tencent,
+   * Under the server configuration, the URL required is defined here.
+   * It should be http://example.com/tencent/wechat
+   * or https://example.com/tencent/wechat.
+   */
+  $items['tencent/wechat'] = array(
+    'title' => 'WeChat',
+    'page callback' => 'tencent_wechat_page',
+    'access arguments' => ['access content'],
+    'type' => MENU_CALLBACK,
+    'file' => 'tencent_wechat.page.inc',
+  );
+
+  $items['admin/config/tencent-wechat'] = array(
+    'title' => 'Tencent WeChat',
+    'description' => 'WeChat configurations.',
+    'position' => 'left',
+    'weight' => -10,
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer tencent wechat'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+  );
+
+  $items['admin/config/tencent-wechat/config'] = array(
+    'title' => 'WeChat Settings',
+    'description' => 'AppId, Token, AES Key, Secret etc.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tencent_wechat_form'),
+    'access arguments' => array('administer tencent wechat'),
+    'file' => 'tencent_wechat.page.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function tencent_wechat_permission() {
+  return [
+    'administer tencent wechat' => [
+      'title' => t('Administer Tencent WeChat module settings'),
+      'description' => t('Perform administration tasks for Tencent WeChat module.'),
+    ]
+  ];
+}

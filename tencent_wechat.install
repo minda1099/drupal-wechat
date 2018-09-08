@@ -1,0 +1,25 @@
+<?php
+
+/**
+ * @file
+ * The tencent_wechat module's install file.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function tencent_wechat_install() {
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function tencent_wechat_uninstall() {
+  variable_del('tencent_wechat_app_id');
+  variable_del('tencent_wechat_secret');
+  variable_del('tencent_wechat_token');
+  variable_del('tencent_wechat_aes_key');
+  variable_del('tencent_wechat_debug');
+  variable_del('tencent_wechat_debug_file_path');
+  variable_del('tencent_wechat_default_message');
+}

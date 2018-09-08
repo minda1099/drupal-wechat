@@ -1,0 +1,13 @@
+name = Tencent WeChat SDK
+description = Load SDK overtrue_wechat
+core = 7.x
+package = Tencent
+
+dependencies[] = libraries
+
+; Information added by Drupal.org packaging script on 2017-08-25
+version = "7.x-1.0-alpha8"
+core = "7.x"
+project = "tencent_wechat"
+datestamp = "1503669246"
+

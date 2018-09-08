@@ -1,0 +1,215 @@
+<?php
+
+/**
+ * Implements hook_install().
+ */
+function tencent_wechatmenu_install() {
+
+  $vocabularies = [
+    [
+      'name' => 'WeChat Menu',
+      'machine_name' => 'tencent_wechat_menu',
+      "description" => 'WeChat Official Account Menu'
+    ],
+    [
+      'name' => 'WeChat Personalized Menu',
+      'machine_name' => 'tencent_wechat_personalized_menu',
+      "description" => 'WeChat Official Account Personalized Menu'
+    ],
+  ];
+
+  // Create WeChat Menu vocabulary.
+  foreach ($vocabularies as $vocabulary) {
+    $machine_name = $vocabulary['machine_name'];
+    if (!taxonomy_vocabulary_machine_name_load($machine_name)) {
+      taxonomy_vocabulary_save((object) $vocabulary);
+    }
+  }
+
+  // @see https://api.drupal.org/api/drupal/modules%21field%21field.crud.inc/group/field_crud/7.x.
+
+  $fields = [
+    [
+      'field_name' => 'tencent_menu_type',
+      'type' => 'list_text',
+      'settings' => [
+        'allowed_values' => [
+          'click' => '点击推事件 (click)',
+          'view' => '跳转 URL (view)',
+          'scancode_push' => '扫码推事件 (scancode_push)',
+          'scancode_waitmsg' => '扫码推事件且弹出“消息接收中”提示框 (scancode_waitmsg)',
+          'pic_sysphoto' => '弹出系统拍照发图 (pic_sysphoto)',
+          'pic_photo_or_album' => '弹出拍照或者相册发图 (pic_photo_or_album)',
+          'pic_weixin' => '弹出微信相册发图器 (pic_weixin)',
+          'location_select' => '弹出地理位置选择器 (location_select)',
+          'miniprogram' => '小程序 (miniprogram)',
+          'media_id' => '下发消息（除文本消息）(media_id)',
+          'view_limited' => '跳转图文消息 URL (view_limited)',
+        ],
+        'allowed_values_function' => '',
+      ],
+    ],
+    [
+      'field_name' => 'tencent_menu_key',
+      'type' => 'text',
+      'settings' => [
+        'max_length' => '128',
+      ],
+    ],
+    [
+      'field_name' => 'tencent_menu_url',
+      'type' => 'text',
+      'settings' => [
+        'max_length' => '1024',
+      ],
+    ],
+    [
+      'field_name' => 'tencent_menu_media_id',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_menu_app_id',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_menu_page_path',
+      'type' => 'text',
+    ]
+  ];
+
+  $instances = [
+    [
+      'field_name' => 'tencent_menu_type',
+      'label' => 'Type',
+    ],
+    [
+      'field_name' => 'tencent_menu_key',
+      'label' => 'Key',
+    ],
+    [
+      'field_name' => 'tencent_menu_url',
+      'label' => 'URL',
+    ],
+    [
+      'field_name' => 'tencent_menu_media_id',
+      'label' => 'MediaId',
+    ],
+    [
+      'field_name' => 'tencent_menu_app_id',
+      'label' => 'AppId',
+    ],
+    [
+      'field_name' => 'tencent_menu_page_path',
+      'label' => 'Page Path',
+    ],
+  ];
+
+  $entity_info = [
+    'entity_type' => 'taxonomy_term',
+    'bundle' => 'tencent_wechat_menu',
+  ];
+
+  $entity_info_personalized = [
+    'entity_type' => 'taxonomy_term',
+    'bundle' => 'tencent_wechat_personalized_menu',
+  ];
+
+  $instances = array_map(function ($instance) use ($entity_info) {
+    return array_merge($instance, $entity_info);
+  }, $instances);
+
+  $instances_personalized = array_map(function ($instance) use ($entity_info_personalized) {
+    return array_merge($instance, $entity_info_personalized);
+  }, $instances);
+
+  // Create WeChat Menu related fields.
+  foreach ($fields as $field) {
+    if (field_read_field($field['field_name']) === FALSE) {
+      field_create_field($field);
+    }
+  }
+
+  // Create WeChat Menu related field instances.
+  foreach ($instances as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) === FALSE) {
+      field_create_instance($instance);
+    }
+  }
+
+  // Create WeChat Personalized Menu related field instances.
+  foreach ($instances_personalized as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) === FALSE) {
+      field_create_instance($instance);
+    }
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function tencent_wechatmenu_uninstall() {
+
+  $field_names = [
+    'tencent_menu_type',
+    'tencent_menu_key',
+    'tencent_menu_url',
+    'tencent_menu_media_id',
+    'tencent_menu_app_id',
+    'tencent_menu_page_path',
+  ];
+
+
+  $entity_info = [
+    'entity_type' => 'taxonomy_term',
+    'bundle' => 'tencent_wechat_menu',
+  ];
+
+  $entity_info_personalized = [
+    'entity_type' => 'taxonomy_term',
+    'bundle' => 'tencent_wechat_personalized_menu',
+  ];
+
+
+  $instances = array_map(function ($field_name) use ($entity_info) {
+    return array_merge(['field_name' => $field_name], $entity_info);
+  }, $field_names);
+
+  $instances_personalized = array_map(function ($field_name) use ($entity_info_personalized) {
+    return array_merge(['field_name' => $field_name], $entity_info_personalized);
+  }, $field_names);
+
+  // Remove WeChat Menu related field instances.
+  foreach ($instances as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) !== FALSE) {
+      field_delete_instance($instance);
+    }
+  }
+
+  // Remove WeChat Personalized Menu related field instances.
+  foreach ($instances_personalized as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) !== FALSE) {
+      field_delete_instance($instance);
+    }
+  }
+
+  // Remove WeChat Menu related fields.
+  foreach ($field_names as $field_name) {
+    if (field_read_field($field_name) !== FALSE) {
+      field_delete_field($field_name);
+    }
+  }
+
+  $vocabulary_machine_names = [
+    'tencent_wechat_menu',
+    'tencent_wechat_personalized_menu',
+  ];
+
+  // Remove WeChat Menu vocabularies.
+  foreach ($vocabulary_machine_names as $machine_name) {
+    $vocabulary = taxonomy_vocabulary_machine_name_load($machine_name);
+    if ($vocabulary) {
+      taxonomy_vocabulary_delete($vocabulary->vid);
+    }
+  }
+
+}

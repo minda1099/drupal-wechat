@@ -1,0 +1,326 @@
+<?php
+
+/**
+ * @file
+ * Implementation of Entity Tencent WeChatMessage.
+ */
+
+require_once __DIR__ . '/includes/tencent_wechatmessage.admin.inc';
+require_once __DIR__ . '/includes/tencent_wechatmessage_type.admin.inc';
+require_once __DIR__ . '/tencent_wechatmessage.inc';
+
+/**
+ * Implements hook_entity_info().
+ */
+function tencent_wechatmessage_entity_info() {
+  $return['tencent_wechatmessage'] = array(
+    'label' => t('WeChat Message'),
+    // The entity class and controller class extend the default entity classes.
+    'entity class' => 'TencentWeChatMessage',
+    'controller class' => 'TencentWeChatMessageController',
+    'base table' => 'tencent_wechatmessage',
+    'fieldable' => TRUE,
+    'exportable' => TRUE,
+    'entity keys' => array(
+      'id' => 'tencent_wechatmessage_id',
+      'bundle' => 'type',
+    ),
+    // Bundles are defined by the types below.
+    'bundles' => array(),
+    'bundle keys' => array('bundle' => 'type'),
+    'label callback' => 'tencent_wechatmessage_label',
+    'uri callback' => 'entity_class_uri',
+    'access callback' => 'tencent_wechatmessage_access',
+    'module' => 'tencent_wechatmessage',
+    // The information below is used by the Controller;
+    // which extends the EntityDefaultUIController.
+    'admin ui' => array(
+      'path' => 'admin/content/tencent_wechatmessage',
+      'file' => 'includes/tencent_wechatmessage.admin.inc',
+      'controller class' => 'TencentWeChatMessageUIController',
+      'menu wildcard' => '%tencent_wechatmessage',
+    ),
+    'metadata controller class' => 'TencentWeChatMessageMetadataController',
+  );
+  // The entity that holds information about the entity types.
+  $return['tencent_wechatmessage_type'] = array(
+    'label' => t('WeChat Message Type'),
+    'entity class' => 'TencentWeChatMessageType',
+    'controller class' => 'TencentWeChatMessageTypeController',
+    'base table' => 'tencent_wechatmessage_type',
+    'fieldable' => FALSE,
+    'bundle of' => 'tencent_wechatmessage',
+    'exportable' => TRUE,
+    'entity keys' => array(
+      'id' => 'id',
+      'name' => 'type',
+      'label' => 'label',
+    ),
+    'access callback' => 'tencent_wechatmessage_type_access',
+    'module' => 'tencent_wechatmessage',
+    // Enable the entity API's admin UI.
+    'admin ui' => array(
+      'path' => 'admin/structure/tencent_wechatmessage_types',
+      'file' => 'includes/tencent_wechatmessage_type.admin.inc',
+      'controller class' => 'TencentWeChatMessageTypeUIController',
+    ),
+  );
+
+  return $return;
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function tencent_wechatmessage_entity_info_alter(&$entity_info) {
+  foreach (tencent_wechatmessage_get_types() as $type => $info) {
+    $entity_info['tencent_wechatmessage']['bundles'][$type] = array(
+      'label' => $info->label,
+      'admin' => array(
+        'path' => 'admin/structure/tencent_wechatmessage_types/manage/%tencent_wechatmessage_type',
+        'real path' => 'admin/structure/tencent_wechatmessage_types/manage/' . $type,
+        'bundle argument' => 4,
+        'access arguments' => array('administer tencent wechatmessage types'),
+      ),
+    );
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function tencent_wechatmessage_permission() {
+  // We set up permisssions to manage entity types, manage all entities and the
+  // permissions for each individual entity.
+  $permissions = array(
+    'administer tencent wechatmessage types' => array(
+      'title' => t('Administer Tencent WeChatMessage types'),
+      'description' => t('Create and delete fields for Tencent WeChatMessage types, and set their permissions.'),
+    ),
+    'administer tencent wechatmessage' => array(
+      'title' => t('Administer Tencent WeChatMessage'),
+      'description' => t('Edit and delete all Tencent WeChatMessage'),
+    ),
+  );
+
+  // Generate permissions.
+  foreach (tencent_wechatmessage_get_types() as $type) {
+    $type_name = check_plain($type->type);
+    $permissions += array(
+      "edit any $type_name tencent wechatmessage" => array(
+        'title' => t('%type_name: Edit any Tencent WeChatMessage', array('%type_name' => $type->label)),
+      ),
+      "view any $type_name tencent wechatmessage" => array(
+        'title' => t('%type_name: View any Tencent WeChatMessage', array('%type_name' => $type->label)),
+      ),
+    );
+  }
+
+  return $permissions;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function tencent_wechatmessage_theme() {
+  return array(
+    'tencent_wechatmessage' => array(
+      'render element' => 'elements',
+      'template' => 'tencent_wechatmessage',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function tencent_wechatmessage_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Add action link 'admin/structure/tencent_wechatmessage/add'
+  // on 'admin/structure/tencent_wechatmessage'.
+  if ($root_path == 'admin/content/tencent_wechatmessage') {
+    $item = menu_get_item('admin/content/tencent_wechatmessage/add');
+    if ($item['access']) {
+      $data['actions']['output'][] = array(
+        '#theme' => 'menu_local_action',
+        '#link' => $item,
+      );
+    }
+  }
+}
+
+/**
+ * Determines whether the given user has access to a Tencent WeChatMessage.
+ *
+ * @param string $op
+ *   The operation being performed. One of 'view', 'update', 'create', 'delete'
+ *   or just 'edit' (being the same as 'create' or 'update').
+ *
+ * @param object $entity
+ *   Optionally a Tencent WeChatMessage or a Tencent WeChatMessage type to check access for.
+ *   If nothing is given, access for all Tencent WeChatMessage is determined.
+ *
+ * @param object $account
+ *   The user to check for. Leave it to NULL to check for the global user.
+ *
+ * @return bool
+ *   Whether access is allowed or not.
+ */
+function tencent_wechatmessage_access($op, $entity = NULL, $account = NULL) {
+  if (user_access('administer tencent wechatmessage', $account)) {
+    return TRUE;
+  }
+
+  if (isset($entity) && $type_name = $entity->type) {
+    $op = ($op == 'view') ? 'view' : 'edit';
+    if (user_access("$op any $type_name tencent wechatmessage", $account)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+/**
+ * Entity label callback.
+ */
+function tencent_wechatmessage_label($entity, $entity_type) {
+  return empty($entity) ? t('New Tencent WeChatMessage') : $entity->label;
+}
+
+/**
+ * Access callback for the entity API.
+ */
+function tencent_wechatmessage_type_access($op, $type = NULL, $account = NULL) {
+  return user_access('administer tencent wechatmessage types', $account);
+}
+
+/**
+ * Gets an array of all Tencent WeChatMessage types, keyed by the type name.
+ *
+ * @param string $type_name
+ *   If set, the type with the given name is returned.
+ *
+ * @return array
+ *   Depending whether $type isset, an array of Tencent WeChatMessage types
+ *   or a single one.
+ */
+function tencent_wechatmessage_get_types($type_name = NULL) {
+  // entity_load will get the Entity controller for our Tencent WeChatMessage entity
+  // and call the load function of that object.
+  // We are loading entities by name here.
+  $types = entity_load_multiple_by_name('tencent_wechatmessage_type', isset($type_name) ? array($type_name) : FALSE);
+
+  return isset($type_name) ? reset($types) : $types;
+}
+
+/**
+ * Menu argument loader; Load a Tencent WeChatMessage type by string.
+ *
+ * @param string $type
+ *   The machine-readable name of a Tencent WeChatMessage type to load.
+ *
+ * @return mixed
+ *   A Tencent WeChatMessage type array or FALSE if $type does not exist.
+ */
+function tencent_wechatmessage_type_load($type) {
+  return tencent_wechatmessage_get_types($type);
+}
+
+/**
+ * Fetch a Tencent WeChatMessage object.
+ *
+ * @param int $tencent_wechatmessage_id
+ *   Integer specifying the tencent_wechatmessage id.
+ *
+ * @return object
+ *   A fully-loaded object or FALSE if it cannot be loaded.
+ *
+ * @see entity_load_single()
+ */
+function tencent_wechatmessage_load($tencent_wechatmessage_id) {
+  return entity_load_single('tencent_wechatmessage', $tencent_wechatmessage_id);
+}
+
+/**
+ * Load multiple Tencent WeChatMessage based on certain conditions.
+ *
+ * @param array $tencent_wechatmessage_ids
+ *   An array of Tencent WeChatMessage IDs.
+ *
+ * @param array $conditions
+ *   An array of conditions to match against the tencent_wechatmessage table.
+ *
+ * @param bool $reset
+ *   A boolean indicating that the internal cache should be reset.
+ *
+ * @return array
+ *   An array of objects, indexed by tencent_wechatmessage_id.
+ *
+ * @see entity_load()
+ * @see tencent_wechatmessage_load()
+ */
+function tencent_wechatmessage_load_multiple($tencent_wechatmessage_ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('tencent_wechatmessage', $tencent_wechatmessage_ids, $conditions, $reset);
+}
+
+/**
+ * Deletes a Tencent WeChatMessage.
+ */
+function tencent_wechatmessage_delete(TencentWeChatMessage $tencent_wechatmessage) {
+  $tencent_wechatmessage->delete();
+}
+
+/**
+ * Delete multiple Tencent WeChatMessage.
+ *
+ * @param array $tencent_wechatmessage_ids
+ *   An array of Tencent WeChatMessage IDs.
+ */
+function tencent_wechatmessage_delete_multiple(array $tencent_wechatmessage_ids) {
+  return entity_delete_multiple('tencent_wechatmessage', $tencent_wechatmessage_ids);
+}
+
+/**
+ * Create a Tencent WeChatMessage object.
+ */
+function tencent_wechatmessage_create($values = array()) {
+  return entity_create('tencent_wechatmessage', $values);
+}
+
+/**
+ * Saves a Tencent WeChatMessage to the database.
+ *
+ * @param string $tencent_wechatmessage
+ *   The Tencent WeChatMessage object.
+ */
+function tencent_wechatmessage_save($tencent_wechatmessage) {
+  return entity_save('tencent_wechatmessage', $tencent_wechatmessage);
+}
+
+/**
+ * Saves a Tencent WeChatMessage type to the db.
+ */
+function tencent_wechatmessage_type_save($type) {
+  return entity_save('tencent_wechatmessage_type', $type);
+}
+
+/**
+ * Deletes a Tencent WeChatMessage type from the db.
+ */
+function tencent_wechatmessage_type_delete(TencentWeChatMessageType $type) {
+  $type->delete();
+}
+
+/**
+ * Menu title callback for showing individual entities.
+ */
+function tencent_wechatmessage_page_title(TencentWeChatMessage $tencent_wechatmessage) {
+  return $tencent_wechatmessage->label;
+}
+
+/**
+ * Sets up content to show an individual Tencent WeChatMessage.
+ */
+function tencent_wechatmessage_page_view($tencent_wechatmessage, $view_mode = 'full') {
+  return entity_view('tencent_wechatmessage_type', array($tencent_wechatmessage), $view_mode);
+}

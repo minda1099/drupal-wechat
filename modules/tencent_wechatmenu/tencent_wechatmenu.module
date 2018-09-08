@@ -1,0 +1,258 @@
+<?php
+use EasyWeChat\Foundation\Application;
+
+require_once __DIR__ . "/tencent_wechatmenu.inc";
+
+/**
+ * Implements hook_menu().
+ */
+function tencent_wechatmenu_menu() {
+  $items['admin/config/tencent-wechat/update-menu'] = array(
+    'title' => 'WeChat Menu',
+    'description' => 'Update WeChat Official Account Menu.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tencent_wechatmenu_form'),
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/config/tencent-wechat/update-personalized-menu'] = array(
+    'title' => 'WeChat Personalized Menu',
+    'description' => 'Update WeChat Official Account Personalized Menu.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tencent_wechatmenu_personalized_form'),
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+function tencent_wechatmenu_form($form, &$form_state) {
+  $form['description'] = array(
+    '#type' => 'markup',
+    '#markup' => t('<h3>Update WeChat Official Account Menu.</h3>'),
+  );
+  $form['link'] = array(
+    '#type' => 'markup',
+    '#markup' => "<p>" . t('Before update, make sure you have CRUD the WeChat Menu items ') . l(t("HERE"), "/admin/structure/taxonomy/tencent_wechat_menu") . '.</p>',
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Update now!'),
+  );
+  return $form;
+}
+
+
+function tencent_wechatmenu_form_submit($form, &$form_state) {
+
+
+  $options = [
+    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
+    'app_id' => variable_get('tencent_wechat_app_id'),
+    'secret' => variable_get('tencent_wechat_secret'),
+    'token'  => variable_get('tencent_wechat_token'),
+    'aes_key' => variable_get('tencent_wechat_aes_key'),
+    'log' => [
+      'level' => 'debug',
+      'file'  => variable_get('tencent_wechat_debug_file_path'),
+    ],
+  ];
+
+  $app = new Application($options);
+  $menu = $app->menu;
+
+
+  $tree = new TencentWeChatMenuTree();
+  $buttons = $tree->getTree('tencent_wechat_menu');
+  $menu->add($buttons);
+
+  drupal_set_message("WeChat Official Account menu updated.");
+}
+
+
+function tencent_wechatmenu_personalized_form($form, &$form_state) {
+
+  $form['description'] = array(
+    '#type' => 'markup',
+    '#markup' => t('<h3>Update WeChat Official Account Personalized Menu.</h3>'),
+  );
+  $form['link'] = array(
+    '#type' => 'markup',
+    '#markup' => "<p>" . t('Before update, make sure you have CRUD the WeChat Menu items ') . l(t("HERE"), "/admin/structure/taxonomy/tencent_wechat_personalized_menu") . '.</p>',
+  );
+
+  $form['rules']['language'] = array(
+    '#title' => t('Rules'),
+    '#type' => 'textfield',
+    '#description' => t('Language'),
+  );
+
+  $form['actions']['add'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add menu'),
+  );
+
+  $form['actions']['delete'] = array(
+    '#type' => 'submit',
+    '#value' => t('Delete menu(s)'),
+    '#submit' => ["tencent_wechatmenu_personalized_form_delete_submit"],
+  );
+
+  return $form;
+}
+
+
+function tencent_wechatmenu_personalized_form_submit($form, &$form_state) {
+
+  $language = $form_state['values']['language'];
+
+  $options = [
+    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
+    'app_id' => variable_get('tencent_wechat_app_id'),
+    'secret' => variable_get('tencent_wechat_secret'),
+    'token'  => variable_get('tencent_wechat_token'),
+    'aes_key' => variable_get('tencent_wechat_aes_key'),
+    'log' => [
+      'level' => 'debug',
+      'file'  => variable_get('tencent_wechat_debug_file_path'),
+    ],
+  ];
+
+  $app = new Application($options);
+  $menu = $app->menu;
+
+  $tree = new TencentWeChatMenuTree();
+  $buttons = $tree->getTree('tencent_wechat_personalized_menu');
+  $rules = [
+    'language' => $language
+  ];
+
+  $menu->add($buttons, $rules);
+
+  drupal_set_message("WeChat Official Account Personalized menu added successfully.");
+}
+
+function tencent_wechatmenu_personalized_form_delete_submit($form, &$form_state) {
+
+  $options = [
+    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
+    'app_id' => variable_get('tencent_wechat_app_id'),
+    'secret' => variable_get('tencent_wechat_secret'),
+    'token'  => variable_get('tencent_wechat_token'),
+    'aes_key' => variable_get('tencent_wechat_aes_key'),
+    'log' => [
+      'level' => 'debug',
+      'file'  => variable_get('tencent_wechat_debug_file_path'),
+    ],
+  ];
+
+  $app = new Application($options);
+  $menu = $app->menu;
+
+  $menus = $menu->all();
+
+  if ($conditionalmenus = $menus->conditionalmenu) {
+    foreach ($conditionalmenus as $conditionalmenu) {
+      $menu_id = $conditionalmenu['menuid'];
+      $menu->destroy($menu_id);
+      drupal_set_message(t("WeChat Official Account Personalized menu $menu_id deleted.", [
+        "!menu_id" => $menu_id
+      ]));
+    }
+  }
+  else {
+    drupal_set_message(t("No WeChat Official Account Personalized menu exists to be deleted."));
+  }
+}
+
+
+/**
+ * Implements hook_form_alter().
+ */
+function tencent_wechatmenu_form_alter(&$form, &$form_state, $form_id) {
+
+  if ($form_id === "taxonomy_form_term" && isset($form["#bundle"])) {
+
+    $vocabulary_machine_names = [
+      'tencent_wechat_menu',
+      'tencent_wechat_personalized_menu',
+    ];
+
+    if (in_array($form["#bundle"], $vocabulary_machine_names)) {
+      $form["name"]['#maxlength'] = 60;
+      $form["description"]["#access"] = FALSE;
+      $form["path"]['alias']["#access"] = FALSE;
+
+      $form['tencent_menu_type']['#weight'] = -10;
+
+      $form['tencent_menu_key']['#states'] = [
+        'visible' => [
+          ':input[name="tencent_menu_type[und]"]' => [
+            ['value' => 'click'],
+            ['value' => 'scancode_push'],
+            ['value' => 'scancode_waitmsg'],
+            ['value' => 'pic_sysphoto'],
+            ['value' => 'pic_photo_or_album'],
+            ['value' => 'pic_weixin'],
+            ['value' => 'location_select'],
+          ],
+        ],
+        'required' => [
+          ':input[name="tencent_menu_type[und]"]' => [
+            ['value' => 'click'],
+            ['value' => 'scancode_push'],
+            ['value' => 'scancode_waitmsg'],
+            ['value' => 'pic_sysphoto'],
+            ['value' => 'pic_photo_or_album'],
+            ['value' => 'pic_weixin'],
+            ['value' => 'location_select'],
+          ],
+        ],
+      ];
+
+      $form['tencent_menu_app_id']['#states'] = [
+        'visible' => [
+          ':input[name="tencent_menu_type[und]"]' => array('value' => 'miniprogram'),
+        ],
+        'required' => [
+          ':input[name="tencent_menu_type[und]"]' => array('value' => 'miniprogram'),
+        ],
+      ];
+
+      $form['tencent_menu_url']['#states'] = [
+        'visible' => [
+          ':input[name="tencent_menu_type[und]"]' => [
+            ['value' => 'view'], ['value' => 'miniprogram'],
+          ],
+        ],
+        'required' => [
+          ':input[name="tencent_menu_type[und]"]' => [
+            ['value' => 'view'], ['value' => 'miniprogram'],
+          ],
+        ],
+      ];
+
+      $form['tencent_menu_media_id']['#states'] = [
+        'visible' => [
+          ':input[name="tencent_menu_type[und]"]' => [
+            ['value' => 'media_id'], ['value' => 'view_limited'],
+          ],
+        ],
+        'required' => [
+          ':input[name="tencent_menu_type[und]"]' => [
+            ['value' => 'media_id'], ['value' => 'view_limited'],
+          ]
+        ],
+      ];
+
+      $form['tencent_menu_page_path']['#states'] = [
+        'visible' => [
+          ':input[name="tencent_menu_type[und]"]' => array('value' => 'miniprogram'),
+        ],
+        'required' => [
+          ':input[name="tencent_menu_type[und]"]' => array('value' => 'miniprogram'),
+        ],
+      ];
+    }
+  }
+}

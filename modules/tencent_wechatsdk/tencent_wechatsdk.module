@@ -1,0 +1,39 @@
+<?php
+
+/**
+ * @file
+ * Register overtrue_wechat library/SDK and load it.
+ */
+
+/**
+ * Implements hook_init().
+ */
+function tencent_wechatsdk_init() {
+  if (($library = libraries_load('overtrue_wechat')) && empty($library['loaded'])) {
+    $path = libraries_get_path('overtrue_wechat');
+    if (file_exists(DRUPAL_ROOT . '/' . $path . '/vendor/autoload.php')) {
+      include_once DRUPAL_ROOT . '/' . $path . '/vendor/autoload.php';
+    }
+    else {
+      $message = 'Tencent WeChat SDK is not well-installed: Missing SDK "overtrue_wechat".';
+      drupal_set_message($message, 'error');
+    }
+  }
+}
+
+/**
+ * Implements hook_libraries_info().
+ */
+function tencent_wechatsdk_libraries_info() {
+  $libraries['overtrue_wechat'] = array(
+    'name' => 'Tencent WeChat SDK',
+    'vendor url' => 'https://easywechat.org/',
+    'download url' => 'https://github.com/overtrue/wechat/releases',
+    'files' => array(
+      'php' => array(
+        'vendor/autoload.php',
+      ),
+    ),
+  );
+  return $libraries;
+}

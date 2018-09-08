@@ -1,0 +1,16 @@
+{
+  "name": "drupal/tencent_wechat",
+  "type": "drupal-module",
+  "description": "Integrates Tencent WeChat with Drupal.",
+  "keywords": ["Drupal", "WeChat", "WeiXin"],
+  "license": "GPL-2.0+",
+  "homepage": "https://www.drupal.org/project/tencent_wechat",
+  "minimum-stability": "dev",
+  "support": {
+    "issues": "https://www.drupal.org/project/issues/tencent_wechat",
+    "source": "http://cgit.drupalcode.org/tencent_wechat"
+  },
+  "require": {
+    "overtrue/wechat": "3.3.9"
+  }
+}

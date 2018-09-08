@@ -1,0 +1,13 @@
+name = Tencent WeChat
+description = Integrates Tencent WeChat with Drupal.
+core = 7.x
+package = Tencent
+
+files[] = tencent_wechat.test
+
+; Information added by Drupal.org packaging script on 2017-08-25
+version = "7.x-1.0-alpha8"
+core = "7.x"
+project = "tencent_wechat"
+datestamp = "1503669246"
+

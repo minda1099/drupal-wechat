@@ -1,0 +1,246 @@
+<?php
+
+/**
+ * @file
+ * tencent_wechatmessage install schema.
+ */
+
+define("TENCENT_WECHATMESSAGE_REQUEST_MESSAGE", 1);
+define("TENCENT_WECHATMESSAGE_RESPONSE_MESSAGE", 2);
+
+/**
+ * Implements hook_schema().
+ */
+function tencent_wechatmessage_schema() {
+  $schema = array();
+
+  $schema['tencent_wechatmessage'] = array(
+    'description' => 'The base table for Tencent WeChatMessage entities.',
+    'fields' => array(
+      'tencent_wechatmessage_id' => array(
+        'description' => 'Primary Key: Identifier for a Tencent WeChatMessage.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The type of this Tencent WeChatMessage.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'label' => array(
+        'description' => 'The name of the Tencent WeChatMessage - a human-readable identifier.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the Tencent WeChatMessage was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the Tencent WeChatMessage was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ) + entity_exportable_schema_fields(),
+    'primary key' => array('tencent_wechatmessage_id'),
+    'indexes' => array(
+      'type' => array('type'),
+    ),
+  );
+
+  $schema['tencent_wechatmessage_type'] = array(
+    'description' => 'Stores information about defined Tencent WeChatMessage types.',
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique Tencent WeChatMessage type identifier.',
+      ),
+      'type' => array(
+        'description' => 'The machine-readable name of this Tencent WeChatMessage type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'label' => array(
+        'description' => 'The human-readable name of this Tencent WeChatMessage type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'The weight of this Tencent WeChatMessage type in relation to others.',
+      ),
+    ) + entity_exportable_schema_fields(),
+    'primary key' => array('id'),
+    'unique keys' => array(
+      'type' => array('type'),
+    ),
+  );
+
+  return $schema;
+}
+
+
+
+
+/**
+ * Implements hook_install().
+ */
+function tencent_wechatmessage_install() {
+
+  $controller = new TencentWeChatMessageTypeController('tencent_wechatmessage_type');
+  $bundle = new stdClass();
+  $bundle->type = 'text';
+  $bundle->label = t('Text');
+  $bundle->is_new = TRUE;
+  $controller->save($bundle);
+
+  $fields = [
+    [
+      'field_name' => 'tencent_to_user_name',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_from_user_name',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_create_time',
+      'type' => 'datestamp',
+      'settings' => [
+        'granularity' => [
+          'month' => 'month',
+          'day' => 'day',
+          'hour' => 'hour',
+          'minute' => 'minute',
+          'second' => 'second',
+          'year' => 'year',
+        ],
+        'tz_handling' => 'site',
+        'timezone_db' => 'UTC',
+        'cache_enabled' => 0,
+        'cache_count' => '4',
+        'todate' => '',
+      ],
+    ],
+    [
+      'field_name' => 'tencent_message_type',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_content',
+      'type' => 'text_long',
+    ],
+    [
+      'field_name' => 'tencent_message_category',
+      'type' => 'list_integer',
+      'settings' => [
+        'allowed_values' => [
+          TENCENT_WECHATMESSAGE_REQUEST_MESSAGE => t('Request Message'),
+          TENCENT_WECHATMESSAGE_RESPONSE_MESSAGE => t('Response Message'),
+        ],
+        'allowed_values_function' => '',
+      ],
+    ],
+  ];
+
+  $instances = [
+    [
+      'field_name' => 'tencent_to_user_name',
+      'label' => 'To User Name',
+    ],
+    [
+      'field_name' => 'tencent_from_user_name',
+      'label' => 'From User Name',
+    ],
+    [
+      'field_name' => 'tencent_create_time',
+      'label' => 'Create Time',
+    ],
+    [
+      'field_name' => 'tencent_message_type',
+      'label' => 'Message Type',
+    ],
+    [
+      'field_name' => 'tencent_content',
+      'label' => 'Content',
+    ],
+    [
+      'field_name' => 'tencent_message_category',
+      'label' => 'Category',
+    ]
+  ];
+
+  $entity_info = [
+    'entity_type' => 'tencent_wechatmessage',
+    'bundle' => 'text',
+  ];
+
+  $instances = array_map(function ($instance) use ($entity_info) {
+    return array_merge($instance, $entity_info);
+  }, $instances);
+
+  foreach ($fields as $field) {
+    if (field_read_field($field['field_name']) === FALSE) {
+      field_create_field($field);
+    }
+  }
+
+  foreach ($instances as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) === FALSE) {
+      field_create_instance($instance);
+    }
+  }
+
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function tencent_wechatmessage_uninstall() {
+
+  $field_names = [
+    'tencent_to_user_name',
+    'tencent_from_user_name',
+    'tencent_create_time',
+    'tencent_message_type',
+    'tencent_content',
+    'tencent_message_category',
+  ];
+
+  $entity_info = [
+    'entity_type' => 'tencent_wechatmessage',
+    'bundle' => 'text',
+  ];
+
+  $instances = array_map(function ($field_name) use ($entity_info) {
+    return array_merge(['field_name' => $field_name], $entity_info);
+  }, $field_names);
+
+  foreach ($instances as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) !== FALSE) {
+      field_delete_instance($instance);
+    }
+  }
+
+  foreach ($field_names as $field_name) {
+    if (field_read_field($field_name) !== FALSE) {
+      field_delete_field($field_name);
+    }
+  }
+
+}

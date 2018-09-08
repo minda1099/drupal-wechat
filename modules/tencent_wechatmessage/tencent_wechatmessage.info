@@ -1,0 +1,19 @@
+name = Tencent WeChat Message
+description = Tencent WeChat Message entity
+core = 7.x
+package = Tencent
+dependencies[] = tencent_wechat
+dependencies[] = entity
+dependencies[] = date
+
+files[] = includes/tencent_wechatmessage.class.inc
+files[] = includes/tencent_wechatmessage.controller.inc
+files[] = includes/tencent_wechatmessage.type.controller.inc
+files[] = includes/tencent_wechatmessage.metadata_controller.inc
+
+; Information added by Drupal.org packaging script on 2017-08-25
+version = "7.x-1.0-alpha8"
+core = "7.x"
+project = "tencent_wechat"
+datestamp = "1503669246"
+

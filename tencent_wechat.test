@@ -1,0 +1,82 @@
+<?php
+
+/**
+ * Tests for tencent_wechat module.
+ */
+
+/**
+ * Class TencentWeChatWebTestCase.
+ */
+class TencentWeChatWebTestCase extends DrupalWebTestCase {
+  protected $privilegedUser;
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Tencent WeChat functions test',
+      'description' => 'Tests Tencent WeChat functions',
+      'group' => 'Tencent WeChat',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp(['tencent_wechat']);
+    $this->privilegedUser = $this->drupalCreateUser(['administer tencent wechat']);
+    $this->drupalLogin($this->privilegedUser);
+  }
+
+  /**
+   * Test settings form.
+   */
+  public function testTencentWeChatSettingsForm() {
+
+    $this->drupalGet("admin/config/tencent-wechat/config");
+    $this->assertResponse(200, 'User is allowed to edit the settings.');
+
+    $dir = self::randomName();
+    $dir_path = "/tmp/" . $dir;
+    $file_name = self::randomName() . ".log";
+    $file_full_path = $dir_path . "/" . $file_name;
+    $this->assertTrue(mkdir($dir_path));
+    $this->assertTrue(touch($file_full_path));
+    $this->verbose($file_full_path);
+
+    $edit = [];
+    $edit["tencent_wechat_app_id"] = "wxabcdabcdabcdabcd";
+    $edit["tencent_wechat_secret"] = "abcd1234abcd1234abcd1234abcd1234";
+    $edit["tencent_wechat_token"] = "token";
+    $edit["tencent_wechat_aes_key"] = "AaBbCcDeEeAaBbCcDeEeAaBbCcDeEeAaBbCcDeEe123";
+    $edit["tencent_wechat_debug"] = 1;
+    $edit["tencent_wechat_debug_file_path"] = $file_full_path;
+    $edit["tencent_wechat_default_message"] = "default message";
+    $this->drupalPost("admin/config/tencent-wechat/config", $edit, t('Save configuration'));
+    $this->assertText(t('The configuration options have been saved.'));
+
+    $this->assertTrue(unlink($file_full_path));
+    $this->assertTrue(rmdir($dir_path));
+
+    $edit["tencent_wechat_debug"] = 0;
+    $edit["tencent_wechat_debug_file_path"] = "";
+
+    $this->drupalPost("admin/config/tencent-wechat/config", $edit, t('Save configuration'));
+    $this->assertText(t('The configuration options have been saved.'));
+
+    $edit["tencent_wechat_debug"] = 1;
+    $this->drupalPost("admin/config/tencent-wechat/config", $edit, t('Save configuration'));
+    $this->assertText(t('File path is empty.'));
+
+    $edit["tencent_wechat_debug_file_path"] = $dir_path . '/' . self::randomName();
+    $this->drupalPost("admin/config/tencent-wechat/config", $edit, t('Save configuration'));
+    $this->assertText(t('File not exists.'));
+
+    $this->assertTrue(mkdir($dir_path));
+    $this->assertTrue(touch($file_full_path));
+    $this->assertTrue(chmod($file_full_path, 0444));
+    $edit["tencent_wechat_debug_file_path"] = $file_full_path;
+    $this->drupalPost("admin/config/tencent-wechat/config", $edit, t('Save configuration'));
+    $this->assertText(t('File not writable.'));
+    $this->assertTrue(unlink($file_full_path));
+    $this->assertTrue(rmdir($dir_path));
+
+  }
+
+}

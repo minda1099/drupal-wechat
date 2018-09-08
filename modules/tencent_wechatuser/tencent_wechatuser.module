@@ -1,0 +1,548 @@
+<?php
+
+/**
+ * @file
+ * Implementation of Entity Tencent WeChatUser.
+ */
+
+use EasyWeChat\Foundation\Application;
+
+require_once __DIR__ . "/includes/tencent_wechatuser.admin.inc";
+require_once __DIR__ . "/includes/tencent_wechatuser_type.admin.inc";
+
+
+/**
+ * Implements hook_menu().
+ */
+function tencent_wechatuser_menu() {
+
+  $items['admin/config/tencent-wechat/sync'] = array(
+    'title' => 'WeChat User',
+    'description' => 'Sync/Update WeChat Official Account Users',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tencent_wechatuser_sync_form'),
+    'access arguments' => array('access content'),
+  );
+  return $items;
+}
+
+/**
+ * WeChat user sync form.
+ */
+function tencent_wechatuser_sync_form() {
+
+  $form['description'] = array(
+    '#type' => 'markup',
+    '#markup' => t('<p>Sync WeChat Official Account users information manually here.</p>'),
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Sync Now',
+  );
+
+  return $form;
+
+}
+
+/**
+ * Sync form submit handler.
+ *
+ * Run batch sync.
+ */
+function tencent_wechatuser_sync_form_submit() {
+  $batch = _tencent_wechatuser_sync_batch();
+  batch_set($batch);
+
+}
+
+/**
+ * Batch definition.
+ */
+function _tencent_wechatuser_sync_batch() {
+
+  $options = [
+    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
+    'app_id' => variable_get('tencent_wechat_app_id'),
+    'secret' => variable_get('tencent_wechat_secret'),
+    'token'  => variable_get('tencent_wechat_token'),
+    'aes_key' => variable_get('tencent_wechat_aes_key'),
+    'log' => [
+      'level' => 'debug',
+      'file'  => variable_get('tencent_wechat_debug_file_path'),
+    ],
+  ];
+
+  $app = new Application($options);
+  $userService = $app->user;
+
+  $next_openid = NULL;
+  $openids = [];
+  $total = 0;
+
+  while (TRUE) {
+    $users = $userService->lists($next_openid);
+    $users = $users->all();
+    $total = $users['total'];
+    if ($users['count'] === 0) {
+      break;
+    }
+    $openids = array_merge(array_values($openids), array_values($users['data']['openid']));
+    $next_openid = $users['next_openid'];
+  }
+  $chunks = array_chunk($openids, 10);
+  $count_chunks = count($chunks);
+
+  $operations = [];
+
+  $i = 0;
+
+  foreach ($chunks as $chunk) {
+    $i++;
+    $operations[] = ["tencent_wechatuser_sync_chunk", [
+      $chunk, $total, t('(Syncing chunk @chunk  of  @count)', [
+        '@chunk ' => $i,
+        '@count' => $count_chunks
+      ])
+    ]
+    ];
+  }
+
+  $batch = array(
+    'operations' => $operations,
+    'finished' => 'tencent_wechatuser_sync_finished',
+    'title' => t('Sync WeChat Public Platform User information.'),
+    'init_message' => t('Sync is starting'),
+    'progress_message' => t('Processed @current out of @total.'),
+    'error_message' => t('Encountered an error.'),
+  );
+  return $batch;
+}
+
+function tencent_wechatuser_sync_chunk($openids, $total, $message, &$context) {
+
+  $options = [
+    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
+    'app_id' => variable_get('tencent_wechat_app_id'),
+    'secret' => variable_get('tencent_wechat_secret'),
+    'token'  => variable_get('tencent_wechat_token'),
+    'aes_key' => variable_get('tencent_wechat_aes_key'),
+    'log' => [
+      'level' => 'debug',
+      'file'  => variable_get('tencent_wechat_debug_file_path'),
+    ],
+  ];
+
+  $app = new Application($options);
+  $userService = $app->user;
+  $data = $userService->batchGet($openids);
+  $data = $data->all();
+  $user_info_list = $data['user_info_list'];
+
+  foreach ($user_info_list as $user_info) {
+    $entity_type = 'tencent_wechatuser';
+    $openid = $user_info['openid'];
+    $entity = tencent_wechatuser_load_entity_by_openid($openid);
+    if (!$entity) {
+      $entity = entity_create($entity_type, array('type' => 'user'));
+    }
+    $wrapper = entity_metadata_wrapper($entity_type, $entity);
+    $wrapper->tencent_openid = $openid;
+    $wrapper->label = $user_info['nickname'];
+    $wrapper->tencent_subscribe = $user_info['subscribe'];
+    $wrapper->tencent_nickname = $user_info['nickname'];
+    $wrapper->tencent_sex = $user_info['sex'];
+    $wrapper->tencent_city = $user_info['city'];
+    $wrapper->tencent_country = $user_info['country'];
+    $wrapper->tencent_province = $user_info['province'];
+    $wrapper->tencent_language = $user_info['language'];
+    $wrapper->tencent_head_image_url = $user_info['headimgurl'];
+    $wrapper->tencent_subscribe_time = $user_info['subscribe_time'];
+    $wrapper->tencent_unionid = isset($user_info['unionid']) ? $user_info['unionid'] : "";
+    $wrapper->tencent_remark = $user_info['remark'];
+    $wrapper->tencent_groupid = $user_info['groupid'];
+    $wrapper->tencent_tagid_list = $user_info['tagid_list'];
+    $wrapper->save();
+
+    $context['results'][] = $openid;
+
+  }
+}
+
+function tencent_wechatuser_load_entity_by_openid ($openid) {
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'tencent_wechatuser')
+    ->entityCondition('bundle', 'user')
+    ->fieldCondition('tencent_openid', 'value', $openid, '=')
+    ->addMetaData('account', user_load(1));
+
+  $result = $query->execute();
+
+  if (isset($result['tencent_wechatuser'])) {
+    $ids = array_keys($result['tencent_wechatuser']);
+    $items = entity_load('tencent_wechatuser', $ids);
+    return reset($items);
+  }
+
+  return FALSE;
+}
+
+function tencent_wechatuser_sync_finished($success, $results, $operations) {
+  if ($success) {
+    $message = count($results) . ' processed.';
+  }
+  else {
+    $error_operation = reset($operations);
+    $message = 'An error occurred ' . $error_operation[0];
+  }
+  drupal_set_message($message);
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function tencent_wechatuser_field_formatter_info() {
+  return array(
+    'tencent_wechatuser_avatar' => array(
+      'label' => t('Avatar'),
+      'field types' => array('text'),
+    )
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function tencent_wechatuser_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array();
+  $settings = $display['settings'];
+
+  switch ($display['type']) {
+
+    case 'tencent_wechatuser_avatar':
+      foreach ($items as $delta => $item) {
+        $element[$delta] = [
+          '#markup' => '<img src="' . $item['value'] . '"/>'
+        ];
+      }
+      break;
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_entity_info().
+ */
+function tencent_wechatuser_entity_info() {
+  $return['tencent_wechatuser'] = array(
+    'label' => t('WeChat User'),
+    // The entity class and controller class extend the default entity classes.
+    'entity class' => 'TencentWeChatUser',
+    'controller class' => 'TencentWeChatUserController',
+    'base table' => 'tencent_wechatuser',
+    'fieldable' => TRUE,
+    'exportable' => TRUE,
+    'entity keys' => array(
+      'id' => 'tencent_wechatuser_id',
+      'bundle' => 'type',
+    ),
+    // Bundles are defined by the types below.
+    'bundles' => array(),
+    'bundle keys' => array('bundle' => 'type'),
+    'label callback' => 'tencent_wechatuser_label',
+    'uri callback' => 'entity_class_uri',
+    'access callback' => 'tencent_wechatuser_access',
+    'module' => 'tencent_wechatuser',
+    // The information below is used by the Controller;
+    // which extends the EntityDefaultUIController.
+    'admin ui' => array(
+      'path' => 'admin/content/tencent_wechatuser',
+      'file' => 'includes/tencent_wechatuser.admin.inc',
+      'controller class' => 'TencentWeChatUserUIController',
+      'menu wildcard' => '%tencent_wechatuser',
+    ),
+    'metadata controller class' => 'TencentWeChatUserMetadataController',
+  );
+  // The entity that holds information about the entity types.
+  $return['tencent_wechatuser_type'] = array(
+    'label' => t('WeChat User Type'),
+    'entity class' => 'TencentWeChatUserType',
+    'controller class' => 'TencentWeChatUserTypeController',
+    'base table' => 'tencent_wechatuser_type',
+    'fieldable' => FALSE,
+    'bundle of' => 'tencent_wechatuser',
+    'exportable' => TRUE,
+    'entity keys' => array(
+      'id' => 'id',
+      'name' => 'type',
+      'label' => 'label',
+    ),
+    'access callback' => 'tencent_wechatuser_type_access',
+    'module' => 'tencent_wechatuser',
+    // Enable the entity API's admin UI.
+    'admin ui' => array(
+      'path' => 'admin/structure/tencent_wechatuser_types',
+      'file' => 'includes/tencent_wechatuser_type.admin.inc',
+      'controller class' => 'TencentWeChatUserTypeUIController',
+    ),
+  );
+
+  return $return;
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function tencent_wechatuser_entity_info_alter(&$entity_info) {
+  foreach (tencent_wechatuser_get_types() as $type => $info) {
+    $entity_info['tencent_wechatuser']['bundles'][$type] = array(
+      'label' => $info->label,
+      'admin' => array(
+        'path' => 'admin/structure/tencent_wechatuser_types/manage/%tencent_wechatuser_type',
+        'real path' => 'admin/structure/tencent_wechatuser_types/manage/' . $type,
+        'bundle argument' => 4,
+        'access arguments' => array('administer tencent wechatuser types'),
+      ),
+    );
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function tencent_wechatuser_permission() {
+  // We set up permisssions to manage entity types, manage all entities and the
+  // permissions for each individual entity.
+  $permissions = array(
+    'administer tencent wechatuser types' => array(
+      'title' => t('Administer WeChat User types'),
+      'description' => t('Create and delete fields for WeChat User types, and set their permissions.'),
+    ),
+    'administer tencent wechatuser' => array(
+      'title' => t('Administer WeChat User'),
+      'description' => t('Edit and delete all WeChat User'),
+    ),
+  );
+
+  // Generate permissions.
+  foreach (tencent_wechatuser_get_types() as $type) {
+    $type_name = check_plain($type->type);
+    $permissions += array(
+      "edit any $type_name tencent wechatuser" => array(
+        'title' => t('%type_name: Edit any WeChat User', array('%type_name' => $type->label)),
+      ),
+      "view any $type_name tencent wechatuser" => array(
+        'title' => t('%type_name: View any WeChat User', array('%type_name' => $type->label)),
+      ),
+    );
+  }
+
+  return $permissions;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function tencent_wechatuser_theme() {
+  return array(
+    'tencent_wechatuser' => array(
+      'render element' => 'elements',
+      'template' => 'tencent_wechatuser',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function tencent_wechatuser_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Add action link 'admin/structure/tencent_wechatuser/add'
+  // on 'admin/structure/tencent_wechatuser'.
+  if ($root_path == 'admin/content/tencent_wechatuser') {
+    $item = menu_get_item('admin/content/tencent_wechatuser/add');
+    if ($item['access']) {
+      $data['actions']['output'][] = array(
+        '#theme' => 'menu_local_action',
+        '#link' => $item,
+      );
+    }
+  }
+}
+
+/**
+ * Determines whether the given user has access to a Tencent WeChatUser.
+ *
+ * @param string $op
+ *   The operation being performed. One of 'view', 'update', 'create', 'delete'
+ *   or just 'edit' (being the same as 'create' or 'update').
+ *
+ * @param object $entity
+ *   Optionally a Tencent WeChatUser or a Tencent WeChatUser type to check access for.
+ *   If nothing is given, access for all Tencent WeChatUser is determined.
+ *
+ * @param object $account
+ *   The user to check for. Leave it to NULL to check for the global user.
+ *
+ * @return bool
+ *   Whether access is allowed or not.
+ */
+function tencent_wechatuser_access($op, $entity = NULL, $account = NULL) {
+  if (user_access('administer tencent wechatuser', $account)) {
+    return TRUE;
+  }
+
+  if (isset($entity) && $type_name = $entity->type) {
+    $op = ($op == 'view') ? 'view' : 'edit';
+    if (user_access("$op any $type_name tencent wechatuser", $account)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+/**
+ * Entity label callback.
+ */
+function tencent_wechatuser_label($entity, $entity_type) {
+  return empty($entity) ? t('New WeChat User') : $entity->label;
+}
+
+/**
+ * Access callback for the entity API.
+ */
+function tencent_wechatuser_type_access($op, $type = NULL, $account = NULL) {
+  return user_access('administer tencent wechatuser types', $account);
+}
+
+/**
+ * Gets an array of all Tencent WeChatUser types, keyed by the type name.
+ *
+ * @param string $type_name
+ *   If set, the type with the given name is returned.
+ *
+ * @return array
+ *   Depending whether $type isset, an array of Tencent WeChatUser types
+ *   or a single one.
+ */
+function tencent_wechatuser_get_types($type_name = NULL) {
+  // entity_load will get the Entity controller for our Tencent WeChatUser entity
+  // and call the load function of that object.
+  // We are loading entities by name here.
+  $types = entity_load_multiple_by_name('tencent_wechatuser_type', isset($type_name) ? array($type_name) : FALSE);
+
+  return isset($type_name) ? reset($types) : $types;
+}
+
+/**
+ * Menu argument loader; Load a Tencent WeChatUser type by string.
+ *
+ * @param string $type
+ *   The machine-readable name of a Tencent WeChatUser type to load.
+ *
+ * @return mixed
+ *   A Tencent WeChatUser type array or FALSE if $type does not exist.
+ */
+function tencent_wechatuser_type_load($type) {
+  return tencent_wechatuser_get_types($type);
+}
+
+/**
+ * Fetch a Tencent WeChatUser object.
+ *
+ * @param int $tencent_wechatuser_id
+ *   Integer specifying the tencent_wechatuser id.
+ *
+ * @return object
+ *   A fully-loaded object or FALSE if it cannot be loaded.
+ *
+ * @see entity_load_single()
+ */
+function tencent_wechatuser_load($tencent_wechatuser_id) {
+  return entity_load_single('tencent_wechatuser', $tencent_wechatuser_id);
+}
+
+/**
+ * Load multiple Tencent WeChatUser based on certain conditions.
+ *
+ * @param array $tencent_wechatuser_ids
+ *   An array of Tencent WeChatUser IDs.
+ *
+ * @param array $conditions
+ *   An array of conditions to match against the tencent_wechatuser table.
+ *
+ * @param bool $reset
+ *   A boolean indicating that the internal cache should be reset.
+ *
+ * @return array
+ *   An array of objects, indexed by tencent_wechatuser_id.
+ *
+ * @see entity_load()
+ * @see tencent_wechatuser_load()
+ */
+function tencent_wechatuser_load_multiple($tencent_wechatuser_ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('tencent_wechatuser', $tencent_wechatuser_ids, $conditions, $reset);
+}
+
+/**
+ * Deletes a Tencent WeChatUser.
+ */
+function tencent_wechatuser_delete(TencentWeChatUser $tencent_wechatuser) {
+  $tencent_wechatuser->delete();
+}
+
+/**
+ * Delete multiple Tencent WeChatUser.
+ *
+ * @param array $tencent_wechatuser_ids
+ *   An array of Tencent WeChatUser IDs.
+ */
+function tencent_wechatuser_delete_multiple(array $tencent_wechatuser_ids) {
+  return entity_delete_multiple('tencent_wechatuser', $tencent_wechatuser_ids);
+}
+
+/**
+ * Create a Tencent WeChatUser object.
+ */
+function tencent_wechatuser_create($values = array()) {
+  return entity_create('tencent_wechatuser', $values);
+}
+
+/**
+ * Saves a Tencent WeChatUser to the database.
+ *
+ * @param string $tencent_wechatuser
+ *   The Tencent WeChatUser object.
+ */
+function tencent_wechatuser_save($tencent_wechatuser) {
+  return entity_save('tencent_wechatuser', $tencent_wechatuser);
+}
+
+/**
+ * Saves a Tencent WeChatUser type to the db.
+ */
+function tencent_wechatuser_type_save($type) {
+  return entity_save('tencent_wechatuser_type', $type);
+}
+
+/**
+ * Deletes a Tencent WeChatUser type from the db.
+ */
+function tencent_wechatuser_type_delete(TencentWeChatUserType $type) {
+  $type->delete();
+}
+
+/**
+ * Menu title callback for showing individual entities.
+ */
+function tencent_wechatuser_page_title(TencentWeChatUser $tencent_wechatuser) {
+  return $tencent_wechatuser->label;
+}
+
+/**
+ * Sets up content to show an individual Tencent WeChatUser.
+ */
+function tencent_wechatuser_page_view($tencent_wechatuser, $view_mode = 'full') {
+  return entity_view('tencent_wechatuser_type', array($tencent_wechatuser), $view_mode);
+}

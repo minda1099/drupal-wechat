@@ -1,0 +1,330 @@
+<?php
+
+/**
+ * @file
+ * Tencent_wechatuser install schema.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function tencent_wechatuser_schema() {
+  $schema = array();
+
+  $schema['tencent_wechatuser'] = array(
+    'description' => 'The base table for Tencent WeChatUser entities.',
+    'fields' => array(
+      'tencent_wechatuser_id' => array(
+        'description' => 'Primary Key: Identifier for a Tencent WeChatUser.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The type of this Tencent WeChatUser.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'label' => array(
+        'description' => 'The name of the Tencent WeChatUser - a human-readable identifier.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the Tencent WeChatUser was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the Tencent WeChatUser was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ) + entity_exportable_schema_fields(),
+    'primary key' => array('tencent_wechatuser_id'),
+    'indexes' => array(
+      'type' => array('type'),
+    ),
+  );
+
+  $schema['tencent_wechatuser_type'] = array(
+    'description' => 'Stores information about defined Tencent WeChatUser types.',
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique Tencent WeChatUser type identifier.',
+      ),
+      'type' => array(
+        'description' => 'The machine-readable name of this Tencent WeChatUser type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'label' => array(
+        'description' => 'The human-readable name of this Tencent WeChatUser type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'The weight of this Tencent WeChatUser type in relation to others.',
+      ),
+    ) + entity_exportable_schema_fields(),
+    'primary key' => array('id'),
+    'unique keys' => array(
+      'type' => array('type'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function tencent_wechatuser_install() {
+  $controller = new TencentWeChatUserTypeController('tencent_wechatuser_type');
+  $bundle = new stdClass();
+  $bundle->type = 'user';
+  $bundle->label = t('WeChat Official Account User');
+  $bundle->is_new = TRUE;
+  $controller->save($bundle);
+
+  // @see https://api.drupal.org/api/drupal/modules%21field%21field.crud.inc/group/field_crud/7.x.
+
+  $fields = [
+    [
+      'field_name' => 'tencent_subscribe',
+      'type' => 'list_integer',
+      'settings' => [
+        'allowed_values' => [
+          0 => 'No',
+          1 => 'Yes',
+        ],
+        'allowed_values_function' => '',
+      ],
+    ],
+    [
+      'field_name' => 'tencent_openid',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_nickname',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_sex',
+      'type' => 'list_integer',
+      'settings' => [
+        'allowed_values' => [
+          0 => 'Unknown',
+          1 => 'Male',
+          2 => 'Female',
+        ],
+        'allowed_values_function' => '',
+      ],
+    ],
+    [
+      'field_name' => 'tencent_city',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_country',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_province',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_language',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_head_image_url',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_subscribe_time',
+      'type' => 'datestamp',
+      'settings' => [
+        'granularity' => [
+          'month' => 'month',
+          'day' => 'day',
+          'hour' => 'hour',
+          'minute' => 'minute',
+          'second' => 'second',
+          'year' => 'year',
+        ],
+        'tz_handling' => 'site',
+        'timezone_db' => 'UTC',
+        'cache_enabled' => 0,
+        'cache_count' => '4',
+        'todate' => '',
+      ],
+    ],
+    [
+      'field_name' => 'tencent_unionid',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_remark',
+      'type' => 'text',
+    ],
+    [
+      'field_name' => 'tencent_groupid',
+      'type' => 'number_integer',
+    ],
+    [
+      'field_name' => 'tencent_tagid_list',
+      'type' => 'number_integer',
+      'cardinality' => '-1',
+    ],
+  ];
+
+  $instances = [
+    [
+      'field_name' => 'tencent_subscribe',
+      'label' => 'Subscribe',
+    ],
+    [
+      'field_name' => 'tencent_openid',
+      'label' => 'Openid',
+    ],
+    [
+      'field_name' => 'tencent_nickname',
+      'label' => 'Nickname',
+    ],
+    [
+      'field_name' => 'tencent_sex',
+      'label' => 'Sex',
+    ],
+    [
+      'field_name' => 'tencent_city',
+      'label' => 'City',
+    ],
+    [
+      'field_name' => 'tencent_country',
+      'label' => 'Country',
+    ],
+    [
+      'field_name' => 'tencent_province',
+      'label' => 'Province',
+    ],
+    [
+      'field_name' => 'tencent_language',
+      'label' => 'Language',
+    ],
+    [
+      'field_name' => 'tencent_head_image_url',
+      'label' => 'Head image URL',
+      'display' => [
+        "default" => [
+          "label" => "above",
+          'type' => 'tencent_wechatuser_avatar',
+          'weight' => '8',
+          'settings' => [],
+          'module' => 'tencent_wechatuser',
+        ],
+      ],
+    ],
+    [
+      'field_name' => 'tencent_subscribe_time',
+      'label' => 'Subscribe time',
+    ],
+    [
+      'field_name' => 'tencent_unionid',
+      'label' => 'Unionid',
+    ],
+    [
+      'field_name' => 'tencent_remark',
+      'label' => 'Remark',
+    ],
+    [
+      'field_name' => 'tencent_groupid',
+      'label' => 'Groupid',
+    ],
+    [
+      'field_name' => 'tencent_tagid_list',
+      'label' => 'Tagid list',
+    ],
+  ];
+
+  $entity_info = [
+    'entity_type' => 'tencent_wechatuser',
+    'bundle' => 'user',
+  ];
+
+  $instances = array_map(function ($instance) use ($entity_info) {
+    return array_merge($instance, $entity_info);
+  }, $instances);
+
+  foreach ($fields as $field) {
+    if (field_read_field($field['field_name']) === FALSE) {
+      field_create_field($field);
+    }
+  }
+
+  foreach ($instances as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) === FALSE) {
+      field_create_instance($instance);
+    }
+  }
+
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function tencent_wechatuser_uninstall() {
+  $field_names = [
+    "tencent_subscribe",
+    'tencent_openid',
+    'tencent_nickname',
+    'tencent_sex',
+    'tencent_city',
+    'tencent_country',
+    'tencent_province',
+    'tencent_language',
+    'tencent_head_image_url',
+    'tencent_subscribe_time',
+    'tencent_unionid',
+    'tencent_remark',
+    'tencent_groupid',
+    'tencent_tagid_list',
+  ];
+
+  $entity_info = [
+    'entity_type' => 'tencent_wechatuser',
+    'bundle' => 'user',
+  ];
+
+  $instances = array_map(function ($field_name) use ($entity_info) {
+    return array_merge(['field_name' => $field_name], $entity_info);
+  }, $field_names);
+
+  foreach ($instances as $instance) {
+    if (field_read_instance($instance['entity_type'], $instance['field_name'], $instance['bundle']) !== FALSE) {
+      field_delete_instance($instance);
+    }
+  }
+
+  foreach ($field_names as $field_name) {
+    if (field_read_field($field_name) !== FALSE) {
+      field_delete_field($field_name);
+    }
+  }
+
+}
