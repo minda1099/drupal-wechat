@@ -54,10 +54,26 @@ function tencent_wechatbinding_menu() {
     'type' => MENU_CALLBACK,
   );
 
+  // Auto get user info.
+  $items['tencent-wechatbinding/oauth-userinfo'] = array(
+    'title' => 'Result',
+    'page callback' => 'tencent_wechatbinding_oauth_userinfo',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
   // Oauth redirect endpoint.
   $items['tencent-wechatbinding/oauth-callback'] = array(
     'title' => 'Result',
     'page callback' => 'tencent_wechatbinding_oauth_callback',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  // Oauth Userinfo redirect endpoint.
+  $items['tencent-wechatbinding/oauth-userinfo-callback'] = array(
+    'title' => 'Result',
+    'page callback' => 'tencent_wechatbinding_oauth_userinfo_callback',
     'access callback' => TRUE,
     'type' => MENU_CALLBACK,
   );
@@ -696,6 +712,107 @@ function tencent_wechatbinding_oauth_callback() {
           }
           drupal_goto("user/" . $user->uid);
         }
+      }
+    }
+  }
+  drupal_goto("user/login");
+}
+
+/**
+ * Oauth Userinfo Callback
+ */
+function tencent_wechatbinding_oauth_userinfo() {
+  global $user;
+
+  if ($user->uid > 0) {
+    $parameters = drupal_get_query_parameters();
+    if (isset($parameters["destination"])) {
+      drupal_goto($parameters["destination"]);
+    }
+    drupal_goto("user/" . $user->uid);
+  }
+
+  $callback = base_path() . "tencent-wechatbinding/oauth-userinfo-callback";
+
+  $destination = drupal_get_destination();
+
+  if (isset($destination["destination"]) && ($destination["destination"] != current_path())) {
+    $callback = base_path() . "tencent-wechatbinding/oauth-userinfo-callback?" . drupal_http_build_query($destination);
+  }
+
+  $options = [
+    'debug'  => variable_get('tencent_wechat_debug') == 1 ? TRUE : FALSE,
+    'app_id' => variable_get('tencent_wechat_app_id'),
+    'secret' => variable_get('tencent_wechat_secret'),
+    'token'  => variable_get('tencent_wechat_token'),
+    'aes_key' => variable_get('tencent_wechat_aes_key'),
+    'log' => [
+      'level' => 'debug',
+      'file'  => variable_get('tencent_wechat_debug_file_path'),
+    ],
+    'oauth' => [
+      'scopes'   => ['snsapi_userinfo'],
+      'callback' => $callback,
+    ],
+  ];
+  $app = new Application($options);
+  $oauth = $app->oauth;
+  $oauth->redirect()->send();
+  exit;
+}
+
+
+
+/**
+ * Oauth Userinfo redirect callback.
+ */
+function tencent_wechatbinding_oauth_userinfo_callback() {
+
+  $parameters = drupal_get_query_parameters();
+
+  if (isset($parameters['code'])) {
+    $parameters = array(
+      'appid' => variable_get('tencent_wechat_app_id'),
+      'secret' => variable_get('tencent_wechat_secret'),
+      'grant_type' => 'authorization_code',
+      'code' => $parameters['code'],
+    );
+
+    $url = url("https://api.weixin.qq.com/sns/oauth2/access_token", array('query' => $parameters));
+    $http = drupal_http_request($url);
+
+    if ($http->code == 200) {
+      $data = json_decode($http->data);
+      $openid = $data->openid;
+
+      $query = db_select('field_data_tencent_openid', 'o');
+      $query->join('field_data_tencent_wechat_user', 'd', 'o.entity_id=d.tencent_wechat_user_target_id');
+      $query->condition('o.tencent_openid_value', $openid);
+      $query->condition('o.entity_type', 'tencent_wechatuser');
+      $query->condition('o.bundle', 'user');
+      $query->condition('d.entity_type', 'user');
+      $query->condition('d.bundle', 'user');
+      $query->fields('d', ["entity_id"]);
+
+      $uid = $query->execute()->fetchField();
+
+      if ($uid && is_numeric($uid)) {
+        global $user;
+        $user = user_load($uid);
+        user_login_finalize();
+
+        if (module_exists("login_destination")) {
+          login_destination_perform_redirect('login');
+        }
+        else {
+          if (isset($parameters["destination"])) {
+            drupal_goto($parameters["destination"]);
+          }
+          drupal_goto("user/" . $user->uid);
+        }
+      } else {
+        // create user
+        drupal_goto("/");
       }
     }
   }
